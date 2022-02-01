@@ -1,0 +1,10 @@
+language: cpp
+os: linux
+dist: focal
+env:
+    - CTEST_OUTPUT_ON_FAILURE=1
+compiler: gcc
+before_install:
+    - ./scripts/dependencies.sh
+git:
+    submodules: true
