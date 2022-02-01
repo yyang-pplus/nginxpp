@@ -1,0 +1,14 @@
+#include <@PROJECT_NAME@/version.hpp>
+
+
+namespace @PROJECT_NAME@ {
+
+std::string_view GetVersion() {
+    return "@psqlxx_VERSION@";
+}
+
+std::string_view GetGitDescribe() {
+    return "@GIT_COMMIT_DESCRIPTION@";
+}
+
+}//namespace @PROJECT_NAME@
