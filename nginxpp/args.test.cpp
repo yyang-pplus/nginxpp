@@ -1,9 +1,9 @@
-#include <psqlxx/args.hpp>
+#include <nginxpp/args.hpp>
 
 #include <gtest/gtest.h>
 
 
-using namespace psqlxx;
+using namespace nginxpp;
 
 
 TEST(ParseOptionsTests, UnrecognisedOptionsDonotThrow) {

@@ -1,11 +1,11 @@
-#include <psqlxx/args.hpp>
-#include <psqlxx/version.hpp>
+#include <nginxpp/args.hpp>
+#include <nginxpp/version.hpp>
 
 
-namespace psqlxx {
+namespace nginxpp {
 
 cxxopts::Options CreateBaseOptions() {
-    cxxopts::Options options("psqlxx", "<Project Description Summary>");
+    cxxopts::Options options("nginxpp", "Yet another web server in C++.");
 
     options.add_options()
     ("h,help", "print usage")
@@ -42,4 +42,4 @@ void HandleBaseOptions(const cxxopts::Options &options,
     }
 }
 
-}//namespace psqlxx
+}//namespace nginxpp

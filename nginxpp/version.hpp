@@ -3,7 +3,7 @@
 #include <string_view>
 
 
-namespace psqlxx {
+namespace nginxpp {
 
 [[nodiscard]]
 std::string_view GetVersion();
@@ -11,4 +11,4 @@ std::string_view GetVersion();
 [[nodiscard]]
 std::string_view GetGitDescribe();
 
-}//namespace psqlxx
+}//namespace nginxpp
