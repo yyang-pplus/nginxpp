@@ -6,13 +6,9 @@
 namespace nginxpp {
 
 [[nodiscard]]
-cxxopts::Options CreateBaseOptions();
-
-[[nodiscard]]
-std::optional<cxxopts::ParseResult>
-ParseOptions(cxxopts::Options &options, int argc, const char *argv[]) noexcept;
+cxxopts::Options CreateBaseOptions() noexcept;
 
 void HandleBaseOptions(const cxxopts::Options &options,
-                       const cxxopts::ParseResult &parsed_options);
+                       const cxxopts::ParseResult &parsed_options) noexcept;
 
 }//namespace nginxpp

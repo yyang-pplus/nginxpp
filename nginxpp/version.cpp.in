@@ -3,11 +3,11 @@
 
 namespace @PROJECT_NAME@ {
 
-std::string_view GetVersion() {
+std::string_view GetVersion() noexcept {
     return "@nginxpp_VERSION@";
 }
 
-std::string_view GetGitDescribe() {
+std::string_view GetGitDescribe() noexcept {
     return "@GIT_COMMIT_DESCRIPTION@";
 }
 
