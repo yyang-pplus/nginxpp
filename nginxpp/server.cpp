@@ -30,8 +30,14 @@ setSocketOption(Args &&... args) {
     }
 }
 
-[[nodiscard]]
-auto createServerSocket(const ServerOptions &options) {
+}//namespace
+
+
+namespace nginxpp {
+
+namespace internal {
+
+Socket createServerSocket(const ServerOptions &options) {
     addrinfo hints{};
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -52,7 +58,7 @@ auto createServerSocket(const ServerOptions &options) {
     std::stringstream errors;
     for (auto *p = servinfo; p; p = p->ai_next) {
         const auto socket_fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-        if (socket_fd == -1) {
+        if (socket_fd == Socket::INVALID_SOCKET) {
             errors << "Failed to create socket: " << strerror(errno) << '\n';
             continue;
         }
@@ -82,10 +88,26 @@ auto createServerSocket(const ServerOptions &options) {
     throw SocketException("Failed to create server socket: " + errors.str());
 }
 
-}//namespace
+[[nodiscard]]
+int getPort(const Socket &sock) {
+    sockaddr_storage address{};
+    socklen_t length = sizeof(address);
+    if (getsockname(sock, reinterpret_cast<sockaddr *>(&address), &length)
+        == -1) {
+        throw SocketException("Failed to getsockname(): "s + strerror(errno));
+    }
 
+    if (address.ss_family == AF_INET) {
+        return ntohs(reinterpret_cast<sockaddr_in *>(&address)->sin_port);
+    } else if (address.ss_family == AF_INET6) {
+        return ntohs(reinterpret_cast<sockaddr_in6 *>(&address)->sin6_port);
+    } else {
+        throw SocketException("Failed to get port: Unsupported address family");
+    }
+}
 
-namespace nginxpp {
+}//namespace internal
+
 
 void AddServerOptions(cxxopts::Options &options) noexcept {
     options.add_options("Server")
@@ -108,19 +130,30 @@ ServerOptions HandleServerOptions(const cxxopts::ParseResult &parsed_options) no
 }
 
 
-Socket::Socket(const int socket_fd): m_socket_fd(socket_fd) {
-    if (m_socket_fd == -1) {
-        throw SocketException("Invalid socket FD.");
+void Socket::close() noexcept {
+    if (m_socket_fd != INVALID_SOCKET) {
+        ::close(std::exchange(m_socket_fd, INVALID_SOCKET));
     }
 }
 
-Socket::~Socket() noexcept {
-    close(m_socket_fd);
+Socket &Socket::operator=(Socket &&other) noexcept {
+    if (this != &other) {
+        close();
+        m_socket_fd = std::exchange(other.m_socket_fd, INVALID_SOCKET);
+    }
+
+    return *this;
 }
 
 
 HttpServer::HttpServer(const ServerOptions &options):
-    m_socket(createServerSocket(options)) {
+    m_options(options),
+    m_socket(internal::createServerSocket(options)) {
+    Expects(m_socket != Socket::INVALID_SOCKET);
+    if (m_options.port == 0) {
+        m_options.port = internal::getPort(m_socket);
+    }
+    Ensures(m_options.port != 0);
 }
 
 }//namespace nginxpp
