@@ -130,19 +130,10 @@ ServerOptions HandleServerOptions(const cxxopts::ParseResult &parsed_options) no
 }
 
 
-void Socket::close() noexcept {
+Socket::~Socket() noexcept {
     if (m_socket_fd != INVALID_SOCKET) {
-        ::close(std::exchange(m_socket_fd, INVALID_SOCKET));
+        close(std::exchange(m_socket_fd, INVALID_SOCKET));
     }
-}
-
-Socket &Socket::operator=(Socket &&other) noexcept {
-    if (this != &other) {
-        close();
-        m_socket_fd = std::exchange(other.m_socket_fd, INVALID_SOCKET);
-    }
-
-    return *this;
 }
 
 
@@ -154,6 +145,24 @@ HttpServer::HttpServer(const ServerOptions &options):
         m_options.port = internal::getPort(m_socket);
     }
     Ensures(m_options.port != 0);
+}
+
+void HttpServer::greet() const noexcept {
+    std::cout << R"(
+ _ __   __ _(_)
+| '_ \ / _` | | '_ \\ \/ / '_ \| '_ \
+| | | | (_| | | | | |>  <| |_) | |_) |
+|_| |_|\__, |_|_| |_/_/\_\ .__/| .__/
+       |___/             |_|   |_|      starting up.
+)";
+    std::cout << "Listening on port: " << m_options.port << std::endl;
+}
+
+bool HttpServer::Run() const noexcept {
+    greet();
+
+    for (;;);
+    return true;
 }
 
 }//namespace nginxpp
