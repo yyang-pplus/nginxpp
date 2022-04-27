@@ -1,5 +1,8 @@
 #include <nginxpp/server.hpp>
 
+#include <atomic>
+
+#include <csignal>
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
@@ -21,6 +24,12 @@ using namespace nginxpp;
 
 
 namespace {
+
+std::atomic<int> g_signal{0};
+
+extern "C" void signalHandler(int signal) {
+    g_signal = signal;
+}
 
 template<typename... Args>
 inline constexpr void
@@ -154,14 +163,24 @@ void HttpServer::greet() const noexcept {
 | | | | (_| | | | | |>  <| |_) | |_) |
 |_| |_|\__, |_|_| |_/_/\_\ .__/| .__/
        |___/             |_|   |_|      starting up.
-)";
-    std::cout << "Listening on port: " << m_options.port << std::endl;
+)" <<
+    "Listening on port: " << m_options.port << std::endl;
 }
 
 bool HttpServer::Run() const noexcept {
     greet();
 
-    for (;;);
+    (void) std::signal(SIGINT, signalHandler);  // Handle 'Ctrl+c'
+    (void) std::signal(SIGQUIT, signalHandler); // Handle 'Ctrl+\'
+
+    for (;;) {
+        if (g_signal) {
+            std::cout << "Caught signal " << strsignal(g_signal) <<
+                '(' << g_signal << "), shutting down..." << std::endl;
+            break;
+        }
+    }
+
     return true;
 }
 
