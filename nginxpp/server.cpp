@@ -81,8 +81,23 @@ inline auto pollOne(pollfd &pfd, const std::chrono::milliseconds &timeout) noexc
     return handleEINTR(poll, &pfd, 1, timeout.count());
 }
 
+[[nodiscard]]
 inline auto hasConnectionRequest(pollfd &pfd) noexcept {
+    Expects(pfd.events == POLLIN);
+
     return 0 != pollOne(pfd, ServerOptions::accept_timeout);
+}
+
+[[nodiscard]]
+inline auto readyToRead(pollfd &pfd) noexcept {
+    Expects(pfd.events == POLLIN);
+
+    return 0 != pollOne(pfd, ServerOptions::read_timeout);
+}
+
+[[nodiscard]]
+inline auto read(const Socket &sock, std::string &buffer) noexcept {
+    return handleEINTR(recv, sock, buffer.data(), buffer.size(), 0);
 }
 
 }//namespace
@@ -155,6 +170,119 @@ int getPort(const Socket &socket) {
 }
 
 }//namespace internal
+
+
+class SocketStream {
+public:
+    explicit SocketStream(Socket sock) noexcept;
+    ~SocketStream() noexcept = default;
+    SocketStream(const SocketStream &) = delete;
+    SocketStream &operator=(const SocketStream &) = delete;
+    SocketStream(SocketStream &&) noexcept = default;
+    SocketStream &operator=(SocketStream &&) noexcept = default;
+
+    [[nodiscard]]
+    bool GetLine(std::string &out, const char delimiter = '\n');
+
+private:
+    static constexpr int buffer_size = 1024 * 4;
+
+    Socket m_socket;
+    pollfd m_poll_fd{};
+    std::string m_buffer;
+    int m_buffer_begin = 0;
+    int m_buffer_end = 0;
+    bool m_connect_closed = false;
+};
+
+SocketStream::SocketStream(Socket sock) noexcept :
+    m_socket(std::move(sock)), m_buffer(buffer_size, 0) {
+    Expects(m_socket != Socket::INVALID_SOCKET);
+
+    timeval timeout{};
+    timeout.tv_sec = ServerOptions::read_timeout.count();
+    timeout.tv_usec = 0;
+    setSocketOption(m_socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+
+    timeout.tv_sec = ServerOptions::write_timeout.count();
+    timeout.tv_usec = 0;
+    setSocketOption(m_socket, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+
+    m_poll_fd.fd = m_socket;
+    m_poll_fd.events = POLLIN;
+}
+
+bool SocketStream::GetLine(std::string &out, const char delimiter) {
+    out.clear();
+
+    while (not m_connect_closed) {
+        if (m_buffer_begin >= m_buffer_end) {
+            if (not readyToRead(m_poll_fd)) {
+                continue;
+            }
+
+            m_buffer_end = read(m_socket, m_buffer);
+            if (m_buffer_end < 0) {
+                throw SocketException("Failed to recv(): "s + strerror(errno));
+            } else if (m_buffer_end == 0) {
+                m_connect_closed = true;
+                return not out.empty();
+            }
+            m_buffer_begin = 0;
+        }
+
+        const auto c = m_buffer[m_buffer_begin++];
+        if (c == delimiter) {
+            return true;
+        }
+        out.push_back(c);
+    }
+
+    return not m_connect_closed;
+}
+
+
+class Session {
+public:
+    Session(Socket sock,
+            const gsl::not_null<gsl::czstring> address,
+            const int port) noexcept;
+    ~Session() noexcept = default;
+    Session(const Session &) = delete;
+    Session &operator=(const Session &) = delete;
+    Session(Session &&) noexcept = default;
+    Session &operator=(Session &&) noexcept = default;
+
+    void Run() noexcept;
+
+private:
+    auto &log(std::ostream &out = std::cout) const noexcept {
+        return out << '[' << m_id << "] ";
+    }
+
+    static unsigned session_created;
+
+    SocketStream m_stream;
+    unsigned m_id{};
+};
+
+unsigned Session::session_created = 0;
+
+Session::Session(Socket sock,
+                 const gsl::not_null<gsl::czstring> address,
+                 const int port) noexcept :
+    m_stream(std::move(sock)), m_id(session_created++) {
+    log() << "Accepted new connection from: " << address <<
+          "; Port: " << port <<
+          "; Session: " << m_id << std::endl;
+}
+
+void Session::Run() noexcept {
+    std::string a_line;
+    while (m_stream.GetLine(a_line)) {
+        log() << a_line << std::endl;
+    }
+}
 
 
 void AddServerOptions(cxxopts::Options &options) noexcept {
@@ -248,25 +376,11 @@ bool HttpServer::Run() const noexcept {
     return true;
 }
 
-void HttpServer::onAccept(Socket sock, const gsl::not_null<gsl::czstring> address, const int port) const noexcept {
-    static std::atomic<unsigned> session_created{};
-
-    Expects(sock != Socket::INVALID_SOCKET);
-
-    const auto session_id = session_created++;
-    std::cout << "Accepted new connection from: " << address <<
-        "; Port: " << port <<
-        "; FD: " << sock <<
-        "; Session: " << session_id << std::endl;
-
-    timeval timeout{};
-    timeout.tv_sec = ServerOptions::read_timeout.count();
-    timeout.tv_usec = 0;
-    setSocketOption(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-
-    timeout.tv_sec = ServerOptions::write_timeout.count();
-    timeout.tv_usec = 0;
-    setSocketOption(sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+void HttpServer::onAccept(Socket sock,
+        const gsl::not_null<gsl::czstring> address,
+        const int port) const noexcept {
+    Session s{std::move(sock), address, port};
+    s.Run();
 }
 
 }//namespace nginxpp
