@@ -256,6 +256,7 @@ public:
     void Run() noexcept;
 
 private:
+    [[nodiscard]]
     auto &log(std::ostream &out = std::cout) const noexcept {
         return out << '[' << m_id << "] ";
     }
@@ -282,6 +283,8 @@ void Session::Run() noexcept {
     while (m_stream.GetLine(a_line)) {
         log() << a_line << std::endl;
     }
+
+    log() << "Connection closed." << std::endl;
 }
 
 
@@ -380,7 +383,9 @@ void HttpServer::onAccept(Socket sock,
         const gsl::not_null<gsl::czstring> address,
         const int port) const noexcept {
     Session s{std::move(sock), address, port};
+    std::thread([s=std::move(s)]() mutable {
     s.Run();
+    }).detach();
 }
 
 }//namespace nginxpp
