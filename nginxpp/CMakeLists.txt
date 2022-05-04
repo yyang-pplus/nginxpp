@@ -16,7 +16,7 @@ add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME}_${PROJECT_NAM
 target_link_libraries(
     ${PROJECT_NAME}_${PROJECT_NAME}
     PRIVATE ${PROJECT_NAME}::version
-    PUBLIC cxxopts Microsoft.GSL::GSL)
+    PUBLIC cxxopts Microsoft.GSL::GSL Threads::Threads)
 target_compile_options(${PROJECT_NAME}_${PROJECT_NAME}
                        PUBLIC ${COMPILER_WARNING_OPTIONS})
 
