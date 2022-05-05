@@ -1,21 +1,24 @@
 default_stages: [commit]
 repos:
   - repo: https://github.com/yyang-pplus/config-sh.git
-    rev: 928dadbbd33bc227a4eadd9a2b717f21f273ad1d
+    rev: 1d47171756422586768117aecebe5b7b0d41e802
     hooks:
-      - id: astyle-c
       - id: astyle-c-in
-      - id: astyle-cpp
       - id: shfmt
 
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v14.0.1
+    hooks:
+      - id: clang-format
+
   - repo: https://github.com/psf/black
-    rev: 20.8b1
+    rev: 22.3.0
     hooks:
       - id: black
         language_version: python3
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v3.4.0
+    rev: v4.2.0
     hooks:
       - id: check-executables-have-shebangs
         stages: [commit]
@@ -36,6 +39,6 @@ repos:
       - id: cmake-lint
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v0.812
+    rev: v0.950
     hooks:
       - id: mypy
