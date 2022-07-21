@@ -1,7 +1,10 @@
 #pragma once
 
+#include <chrono>
 #include <string>
 #include <utility>
+
+#include <gsl/gsl>
 
 
 namespace cxxopts {
@@ -20,6 +23,9 @@ struct ServerOptions {
 
     static constexpr bool tcp_nodelay = false;
     static constexpr int listen_backlog = 10;
+    static constexpr std::chrono::seconds read_timeout{5};
+    static constexpr std::chrono::seconds write_timeout{5};
+    static constexpr std::chrono::milliseconds accept_timeout{100};
 };
 
 void AddServerOptions(cxxopts::Options &options) noexcept;
@@ -72,6 +78,10 @@ public:
 
 private:
     void greet() const noexcept;
+
+    void onAccept(Socket sock,
+                  const gsl::not_null<gsl::czstring> address,
+                  const int port) const noexcept;
 
     ServerOptions m_options;
     Socket m_socket;
