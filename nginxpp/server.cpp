@@ -256,6 +256,7 @@ public:
     void Run() noexcept;
 
 private:
+    [[nodiscard]]
     auto &log(std::ostream &out = std::cout) const noexcept {
         return out << '[' << m_id << "] ";
     }
@@ -282,6 +283,8 @@ void Session::Run() noexcept {
     while (m_stream.GetLine(a_line)) {
         log() << a_line << std::endl;
     }
+
+    log() << "Connection closed." << std::endl;
 }
 
 
@@ -358,7 +361,7 @@ bool HttpServer::Run() const noexcept {
 
         socklen_t address_size = sizeof(their_address);
         Socket sock{accept(m_socket, reinterpret_cast<sockaddr *>(&their_address), &address_size)};
-        if (sock == Socket::INVALID_SOCKET) {
+        if (sock == Socket::INVALID_SOCKET){
             if (errno == EMFILE) {
                 std::cerr << "Open file descriptors limit reached. Waiting for available spots." << std::endl;
                 std::this_thread::sleep_for(ServerOptions::accept_timeout);
@@ -380,7 +383,9 @@ void HttpServer::onAccept(Socket sock,
         const gsl::not_null<gsl::czstring> address,
         const int port) const noexcept {
     Session s{std::move(sock), address, port};
-    s.Run();
+    std::thread([s=std::move(s)]() mutable {
+        s.Run();
+    }).detach();
 }
 
 }//namespace nginxpp
