@@ -6,3 +6,5 @@ endif ()
 
 option(CXXOPTS_BUILD_TESTS "Set to ON to build cxxopts tests" OFF)
 add_subdirectory(cxxopts)
+
+add_subdirectory(GSL)
