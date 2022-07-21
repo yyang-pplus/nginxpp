@@ -1,7 +1,7 @@
-#include <psqlxx/args.hpp>
+#include <nginxpp/args.hpp>
 
 
-using namespace psqlxx;
+using namespace nginxpp;
 
 
 namespace {

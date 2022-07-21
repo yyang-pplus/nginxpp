@@ -3,7 +3,7 @@
 #include <cxxopts.hpp>
 
 
-namespace psqlxx {
+namespace nginxpp {
 
 [[nodiscard]]
 cxxopts::Options CreateBaseOptions();
@@ -15,4 +15,4 @@ ParseOptions(cxxopts::Options &options, int argc, const char *argv[]) noexcept;
 void HandleBaseOptions(const cxxopts::Options &options,
                        const cxxopts::ParseResult &parsed_options);
 
-}//namespace psqlxx
+}//namespace nginxpp

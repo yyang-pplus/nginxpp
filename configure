@@ -1,4 +1,4 @@
 #!/bin/bash
 
 cmake . -DCMAKE_BUILD_TYPE:STRING=Debug \
-    -Dpsqlxx_WANT_AUTO_TESTS:BOOL=OFF
+    -Dnginxpp_WANT_AUTO_TESTS:BOOL=OFF
