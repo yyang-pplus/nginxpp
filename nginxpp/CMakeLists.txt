@@ -10,7 +10,7 @@ add_library(${PROJECT_NAME}::version ALIAS ${PROJECT_NAME}_version)
 set_target_properties(${PROJECT_NAME}_version PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_options(${PROJECT_NAME}_version PRIVATE ${COMPILER_WARNING_OPTIONS})
 
-add_library(${PROJECT_NAME}_${PROJECT_NAME} args.cpp args.hpp)
+add_library(${PROJECT_NAME}_${PROJECT_NAME} args.cpp args.hpp server.cpp server.hpp)
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME}_${PROJECT_NAME})
 target_link_libraries(
     ${PROJECT_NAME}_${PROJECT_NAME}
@@ -28,8 +28,6 @@ add_test(NAME ${PROJECT_NAME}.main.can_display_help COMMAND ${PROJECT_NAME}_main
 add_test(NAME ${PROJECT_NAME}.main.can_display_version COMMAND ${PROJECT_NAME}_main
                                                                --version)
 enable_auto_test_command(${PROJECT_NAME}_main ^${PROJECT_NAME}.main)
-
-discover_gtest_for(args ${PROJECT_NAME}::${PROJECT_NAME})
 
 if (${PROJECT_NAME}_WANT_INSTALLER)
     install(
