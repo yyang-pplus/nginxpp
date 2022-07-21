@@ -7,10 +7,12 @@ namespace nginxpp {
 cxxopts::Options CreateBaseOptions() noexcept {
     cxxopts::Options options("nginxpp", "Yet another web server in C++.");
 
+    // clang-format off
     options.add_options()
     ("h,help", "print usage")
     ("V,version", "print version")
     ;
+    // clang-format on
 
     return options;
 }
@@ -29,4 +31,4 @@ void HandleBaseOptions(const cxxopts::Options &options,
     }
 }
 
-}//namespace nginxpp
+} //namespace nginxpp
