@@ -1,7 +1,10 @@
 #include <nginxpp/server.hpp>
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <iostream>
+#include <streambuf>
 #include <thread>
 
 #include <csignal>
@@ -20,6 +23,7 @@
 #include <cxxopts.hpp>
 
 #include <nginxpp/exception.hpp>
+#include <nginxpp/message.hpp>
 
 
 using std::string_literals::operator""s;
@@ -90,8 +94,9 @@ template<typename Function, typename... Args>
     return 0 != pollOne(pfd, ServerOptions::read_timeout);
 }
 
-[[nodiscard]] inline auto read(const Socket &sock, std::string &buffer) noexcept {
-    return handleEINTR(recv, sock, buffer.data(), buffer.size(), 0);
+[[nodiscard]] inline auto
+read(const Socket &sock, char *const buffer, const std::size_t len) noexcept {
+    return handleEINTR(recv, sock, buffer, len, 0);
 }
 
 } //namespace
@@ -163,83 +168,96 @@ Socket createServerSocket(const ServerOptions &options) {
 } //namespace internal
 
 
-class SocketStream {
+class SocketBuf : public std::streambuf {
 public:
-    explicit SocketStream(Socket sock) noexcept;
-    ~SocketStream() noexcept = default;
-    SocketStream(const SocketStream &) = delete;
-    SocketStream &operator=(const SocketStream &) = delete;
-    SocketStream(SocketStream &&) noexcept = default;
-    SocketStream &operator=(SocketStream &&) noexcept = default;
+    SocketBuf(Socket sock) noexcept : m_socket(std::move(sock)) {
+        Expects(m_socket != Socket::INVALID_SOCKET);
 
-    [[nodiscard]] bool GetLine(std::string &out, const char delimiter = '\n');
+        timeval timeout {};
+        timeout.tv_sec = ServerOptions::read_timeout.count();
+        timeout.tv_usec = 0;
+        setSocketOption(m_socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
-private:
-    static constexpr int buffer_size = 1024 * 4;
+        timeout.tv_sec = ServerOptions::write_timeout.count();
+        timeout.tv_usec = 0;
+        setSocketOption(m_socket, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
 
-    Socket m_socket;
-    pollfd m_poll_fd {};
-    std::string m_buffer;
-    int m_buffer_begin = 0;
-    int m_buffer_end = 0;
-    bool m_connect_closed = false;
-};
+        m_poll_fd.fd = m_socket;
+        m_poll_fd.events = POLLIN;
 
-SocketStream::SocketStream(Socket sock) noexcept :
-    m_socket(std::move(sock)), m_buffer(buffer_size, 0) {
-    Expects(m_socket != Socket::INVALID_SOCKET);
-
-    timeval timeout {};
-    timeout.tv_sec = ServerOptions::read_timeout.count();
-    timeout.tv_usec = 0;
-    setSocketOption(m_socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-
-    timeout.tv_sec = ServerOptions::write_timeout.count();
-    timeout.tv_usec = 0;
-    setSocketOption(m_socket, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
-
-    m_poll_fd.fd = m_socket;
-    m_poll_fd.events = POLLIN;
-}
-
-bool SocketStream::GetLine(std::string &out, const char delimiter) {
-    out.clear();
-
-    while (not m_connect_closed) {
-        if (m_buffer_begin >= m_buffer_end) {
-            if (not readyToRead(m_poll_fd)) {
-                continue;
-            }
-
-            m_buffer_end = read(m_socket, m_buffer);
-            if (m_buffer_end < 0) {
-                throw SocketException("Failed to recv(): "s + strerror(errno));
-            } else if (m_buffer_end == 0) {
-                m_connect_closed = true;
-                return not out.empty();
-            }
-            m_buffer_begin = 0;
-        }
-
-        const auto c = m_buffer[m_buffer_begin++];
-        if (c == delimiter) {
-            return true;
-        }
-        out.push_back(c);
+        setg(m_buffer.begin(), m_buffer.begin(), m_buffer.begin());
     }
 
-    return not m_connect_closed;
-}
+    SocketBuf(const SocketBuf &) = delete;
+    SocketBuf &operator=(const SocketBuf &) = delete;
+    SocketBuf(SocketBuf &&) = default;
+    SocketBuf &operator=(SocketBuf &&) = default;
+
+    virtual ~SocketBuf() {
+        sync();
+    }
+
+protected:
+    static constexpr int SIZE = 4096;
+    static constexpr int MAX_PUTBACK = 8;
+
+    virtual int_type underflow() override {
+        if (gptr() < egptr()) {
+            return traits_type::to_int_type(*gptr());
+        }
+
+        const auto num_putback = std::min(MAX_PUTBACK, static_cast<int>(gptr() - eback()));
+        std::copy(gptr() - num_putback, gptr(), m_buffer.begin());
+
+        auto *const new_gptr = m_buffer.begin() + num_putback;
+        const auto n = read(m_socket, new_gptr, SIZE - num_putback);
+        if (n <= 0) {
+            return traits_type::eof();
+        }
+
+        setg(m_buffer.begin(), new_gptr, new_gptr + n);
+
+        return traits_type::to_int_type(*gptr());
+    }
+
+    virtual int sync() override {
+        return 0;
+    }
+
+private:
+    std::array<char_type, SIZE> m_buffer;
+    pollfd m_poll_fd {};
+    Socket m_socket;
+};
+
+
+class SocketStream : public std::iostream {
+public:
+    explicit SocketStream(Socket sock) noexcept : std::iostream(nullptr), m_buf(std::move(sock)) {
+        rdbuf(&m_buf);
+    }
+
+    SocketStream(SocketStream &&rhs) noexcept :
+        std::iostream(std::move(rhs)), m_buf(std::move(rhs.m_buf)) {
+        rdbuf(&m_buf);
+    }
+
+    auto &operator=(SocketStream &&rhs) noexcept {
+        if (this != &rhs) {
+            std::iostream::operator=(std::move(rhs));
+            m_buf = std::move(rhs.m_buf);
+        }
+        return *this;
+    }
+
+private:
+    SocketBuf m_buf;
+};
 
 
 class Session {
 public:
     Session(Socket sock, const gsl::not_null<gsl::czstring> address, const int port) noexcept;
-    ~Session() noexcept = default;
-    Session(const Session &) = delete;
-    Session &operator=(const Session &) = delete;
-    Session(Session &&) noexcept = default;
-    Session &operator=(Session &&) noexcept = default;
 
     void Run() noexcept;
 
@@ -265,9 +283,9 @@ Session::Session(Socket sock, const gsl::not_null<gsl::czstring> address, const 
 }
 
 void Session::Run() noexcept {
-    std::string a_line;
-    while (m_stream.GetLine(a_line)) {
-        log() << a_line << std::endl;
+    while (not g_signal) {
+        const auto request = ParseOne(m_stream);
+        (void)request;
     }
 
     log() << "Connection closed." << std::endl;
@@ -342,8 +360,9 @@ bool HttpServer::Run() const noexcept {
             break;
         }
 
-        if (not hasConnectionRequest(server_pfd))
+        if (not hasConnectionRequest(server_pfd)) {
             continue;
+        }
 
         socklen_t address_size = sizeof(their_address);
         Socket sock {
