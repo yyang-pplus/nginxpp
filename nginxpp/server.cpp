@@ -284,8 +284,17 @@ Session::Session(Socket sock, const gsl::not_null<gsl::czstring> address, const 
 
 void Session::Run() noexcept {
     while (not g_signal) {
-        const auto request = ParseOne(m_stream);
-        (void)request;
+        Response a_response;
+        try {
+            const auto a_request = ParseOne(m_stream);
+            (void)a_request;
+        } catch (const ParserException &e) {
+            log() << "Failed to parse request: " << e.what() << std::endl;
+            a_response.status = 400;
+        } catch (const HttpVersionException &e) {
+            log() << "Invalid request: " << e.what() << std::endl;
+            a_response.status = 505;
+        }
     }
 
     log() << "Connection closed." << std::endl;

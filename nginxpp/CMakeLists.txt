@@ -18,7 +18,8 @@ add_library(
     message.cpp
     message.hpp
     server.cpp
-    server.hpp)
+    server.hpp
+    string_utils.hpp)
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME}_${PROJECT_NAME})
 target_link_libraries(
     ${PROJECT_NAME}_${PROJECT_NAME}
@@ -41,6 +42,7 @@ if (${PROJECT_NAME}_WANT_TESTS)
 endif ()
 
 discover_gtest_for(server ${PROJECT_NAME}::${PROJECT_NAME})
+discover_gtest_for(message ${PROJECT_NAME}::${PROJECT_NAME})
 
 if (${PROJECT_NAME}_WANT_INSTALLER)
     install(
