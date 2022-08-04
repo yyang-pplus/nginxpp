@@ -99,6 +99,25 @@ read(const Socket &sock, char *const buffer, const std::size_t len) noexcept {
     return handleEINTR(recv, sock, buffer, len, 0);
 }
 
+[[nodiscard]] inline auto
+write(const Socket &sock, const char *const buffer, const std::size_t len) noexcept {
+    return handleEINTR(send, sock, buffer, len, 0);
+}
+
+[[nodiscard]] inline auto
+sendAll(const Socket &sock, const char *const buffer, const std::size_t requested) noexcept {
+    for (std::size_t total_sent = 0; total_sent < requested;) {
+        const auto left = requested - total_sent;
+        const auto n = write(sock, buffer + total_sent, left);
+        if (n == -1) {
+            return false;
+        }
+        total_sent += n;
+    }
+
+    return true;
+}
+
 } //namespace
 
 
@@ -185,7 +204,8 @@ public:
         m_poll_fd.fd = m_socket;
         m_poll_fd.events = POLLIN;
 
-        setg(m_buffer.begin(), m_buffer.begin(), m_buffer.begin());
+        setg(m_in_buffer.begin(), m_in_buffer.begin(), m_in_buffer.begin());
+        setp(m_out_buffer.begin(), m_out_buffer.begin() + SIZE - 1);
     }
 
     SocketBuf(const SocketBuf &) = delete;
@@ -207,25 +227,47 @@ protected:
         }
 
         const auto num_putback = std::min(MAX_PUTBACK, static_cast<int>(gptr() - eback()));
-        std::copy(gptr() - num_putback, gptr(), m_buffer.begin());
+        std::copy(gptr() - num_putback, gptr(), m_in_buffer.begin());
 
-        auto *const new_gptr = m_buffer.begin() + num_putback;
+        auto *const new_gptr = m_in_buffer.begin() + num_putback;
         const auto n = read(m_socket, new_gptr, SIZE - num_putback);
         if (n <= 0) {
             return traits_type::eof();
         }
 
-        setg(m_buffer.begin(), new_gptr, new_gptr + n);
+        setg(m_in_buffer.begin(), new_gptr, new_gptr + n);
 
         return traits_type::to_int_type(*gptr());
     }
 
+    auto flushBuffer() noexcept {
+        if (pptr() == pbase()) {
+            return true;
+        }
+
+        const auto requested = pptr() - pbase();
+        const auto result = sendAll(m_socket, pbase(), requested);
+        pbump(-requested);
+
+        return result;
+    }
+
+    virtual int_type overflow(int_type c) override {
+        if (not traits_type::eq_int_type(c, traits_type::eof())) {
+            *pptr() = c;
+            pbump(1);
+        }
+
+        return flushBuffer() ? traits_type::not_eof(c) : traits_type::eof();
+    }
+
     virtual int sync() override {
-        return 0;
+        return flushBuffer() ? 0 : -1;
     }
 
 private:
-    std::array<char_type, SIZE> m_buffer;
+    std::array<char_type, SIZE> m_in_buffer;
+    std::array<char_type, SIZE> m_out_buffer;
     pollfd m_poll_fd {};
     Socket m_socket;
 };
@@ -287,7 +329,7 @@ void Session::Run() noexcept {
         Response a_response;
         try {
             const auto a_request = ParseOne(m_stream);
-            (void)a_request;
+            a_response = Handle(a_request);
         } catch (const ParserException &e) {
             log() << "Failed to parse request: " << e.what() << std::endl;
             a_response.status = 400;
@@ -295,6 +337,9 @@ void Session::Run() noexcept {
             log() << "Invalid request: " << e.what() << std::endl;
             a_response.status = 505;
         }
+
+        m_stream << a_response << std::flush;
+        break;
     }
 
     log() << "Connection closed." << std::endl;
