@@ -23,11 +23,21 @@ struct Request {
 };
 
 struct Response {
+    void SetBody(std::string b) noexcept {
+        headers["Content-Type"] = "text/html; charset=ascii";
+        headers["Content-Length"] = std::to_string(b.size());
+
+        body = std::move(b);
+    }
+
     HeaderMap headers;
+    std::string body;
     int status {};
 };
 
 [[nodiscard]] Request ParseOne(std::istream &in);
+
+[[nodiscard]] Response Handle(const Request &a_request) noexcept;
 
 std::ostream &operator<<(std::ostream &out, const Response &a_response) noexcept;
 

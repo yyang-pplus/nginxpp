@@ -28,8 +28,6 @@ class SocketException : public Exception {
 class ParserException : public Exception {
 public:
     using Exception::Exception;
-    ParserException() : Exception("Bad Request") {
-    }
 };
 
 class ServerException : public Exception {

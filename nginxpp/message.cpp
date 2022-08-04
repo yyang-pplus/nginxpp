@@ -4,6 +4,8 @@
 #include <regex>
 #include <string>
 
+#include <gsl/gsl>
+
 #include <nginxpp/exception.hpp>
 #include <nginxpp/string_utils.hpp>
 
@@ -42,14 +44,14 @@ namespace {
 [[nodiscard]] auto parseStartLine(std::istream &in) {
     std::string start_line;
     if (not std::getline(in, start_line)) {
-        throw ParserException {};
+        throw ParserException {"No start line"};
     }
 
-    static const std::regex start_line_regex {R"(^(\S+)\s(\S+)\s(\S+)$)"};
+    static const std::regex start_line_regex {R"(^(\S+)\s(\S+)\s(\S+)\s*$)"};
 
     std::smatch matches;
     if (not std::regex_match(start_line, matches, start_line_regex)) {
-        throw ParserException {};
+        throw ParserException {"Invalid start line: '" + start_line + '\''};
     }
 
     Request a_request;
@@ -84,7 +86,9 @@ void parseOneHeader(const std::string &a_header,
         }
         parseOneHeader(a_line, headers);
     }
+    in.clear();
 
+    Ensures(in);
     return headers;
 }
 
@@ -233,6 +237,15 @@ namespace nginxpp {
     return a_request;
 }
 
+[[nodiscard]] Response Handle(const Request &) noexcept {
+    Response a_response;
+    a_response.status = 200;
+
+    a_response.SetBody("Hello World");
+
+    return a_response;
+}
+
 std::ostream &operator<<(std::ostream &out, const Response &a_response) noexcept {
     out << VERSION << ' ' << a_response.status << ' ' << toStatusText(a_response.status) << '\n';
 
@@ -240,7 +253,7 @@ std::ostream &operator<<(std::ostream &out, const Response &a_response) noexcept
         out << key << ": " << value << '\n';
     }
 
-    return out;
+    return out << '\n' << a_response.body;
 }
 
 } //namespace nginxpp
