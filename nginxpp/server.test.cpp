@@ -10,8 +10,9 @@ using namespace nginxpp;
 
 namespace {
 
-[[nodiscard]] inline auto createServerOptions(const int port) {
+[[nodiscard]] inline auto createServerOptions(const int port, std::string root_dir = ".") {
     ServerOptions options;
+    options.base_mount_dir = root_dir;
     options.port = port;
     return options;
 }
@@ -22,6 +23,11 @@ namespace {
 TEST(HttpServerTests, NoThrowIfGivenValidPort) {
     const auto options = createServerOptions(0);
     ASSERT_NO_THROW(HttpServer {options});
+}
+
+TEST(HttpServerTests, ThrowIfGivenPathNotExists) {
+    const auto options = createServerOptions(0, "no_such_path");
+    ASSERT_THROW(HttpServer {options}, ServerException);
 }
 
 TEST(HttpServerTests, ThrowIfGivenInvalidPort) {

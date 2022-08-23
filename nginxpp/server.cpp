@@ -299,7 +299,10 @@ private:
 
 class Session {
 public:
-    Session(Socket sock, const gsl::not_null<gsl::czstring> address, const int port) noexcept;
+    Session(Socket sock,
+            const gsl::not_null<gsl::czstring> address,
+            const int port,
+            std::filesystem::path root_dir) noexcept;
 
     void Run() noexcept;
 
@@ -311,33 +314,29 @@ private:
     static unsigned session_created;
 
     SocketStream m_stream;
+    std::filesystem::path m_root_dir;
     unsigned m_id {};
 };
 
 unsigned Session::session_created = 0;
 
-Session::Session(Socket sock, const gsl::not_null<gsl::czstring> address, const int port) noexcept
-    :
+Session::Session(Socket sock,
+                 const gsl::not_null<gsl::czstring> address,
+                 const int port,
+                 std::filesystem::path root_dir) noexcept :
     m_stream(std::move(sock)),
-    m_id(session_created++) {
+    m_root_dir(std::move(root_dir)), m_id(session_created++) {
     log() << "Accepted new connection from: " << address << "; Port: " << port
           << "; Session: " << m_id << std::endl;
 }
 
 void Session::Run() noexcept {
     while (not g_signal) {
-        Response a_response;
-        try {
-            const auto a_request = ParseOne(m_stream);
-            a_response = Handle(a_request);
-        } catch (const ParserException &e) {
-            log() << "Failed to parse request: " << e.what() << std::endl;
-            a_response.status = 400;
-        } catch (const HttpVersionException &e) {
-            log() << "Invalid request: " << e.what() << std::endl;
-            a_response.status = 505;
-        }
+        const auto a_response = Handle(ParseOne(m_stream), m_root_dir);
 
+        if (not a_response) {
+            log() << a_response.error_str << std::endl;
+        }
         m_stream << a_response << std::flush;
         break;
     }
@@ -376,12 +375,20 @@ Socket::~Socket() noexcept {
 
 
 HttpServer::HttpServer(const ServerOptions &options) :
-    m_options(options), m_socket(internal::createServerSocket(options)) {
+    m_root_dir(options.base_mount_dir), m_socket(internal::createServerSocket(options)),
+    m_port(options.port) {
     Expects(m_socket != Socket::INVALID_SOCKET);
-    if (m_options.port == 0) {
-        m_options.port = internal::getPort(m_socket);
+
+    if (not std::filesystem::exists(m_root_dir)) {
+        throw ServerException {"Base mount directory doesn't exist: '" + options.base_mount_dir +
+                               '\''};
     }
-    Ensures(m_options.port != 0);
+
+    if (m_port == 0) {
+        m_port = internal::getPort(m_socket);
+    }
+
+    Ensures(m_port != 0);
 }
 
 void HttpServer::greet() const noexcept {
@@ -392,7 +399,7 @@ void HttpServer::greet() const noexcept {
 |_| |_|\__, |_|_| |_/_/\_\ .__/| .__/
        |___/             |_|   |_|      starting up.
 )"
-              << "Listening on port: " << m_options.port << std::endl;
+              << "Listening on port: " << m_port << std::endl;
 }
 
 
@@ -446,7 +453,7 @@ bool HttpServer::Run() const noexcept {
 void HttpServer::onAccept(Socket sock,
                           const gsl::not_null<gsl::czstring> address,
                           const int port) const noexcept {
-    Session s {std::move(sock), address, port};
+    Session s {std::move(sock), address, port, m_root_dir};
     std::thread([s = std::move(s)]() mutable {
         s.Run();
     }).detach();

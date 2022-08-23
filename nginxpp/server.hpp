@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <filesystem>
 #include <string>
 #include <utility>
 
@@ -78,8 +79,9 @@ private:
                   const gsl::not_null<gsl::czstring> address,
                   const int port) const noexcept;
 
-    ServerOptions m_options;
+    std::filesystem::path m_root_dir;
     Socket m_socket;
+    int m_port = 0;
 };
 
 
