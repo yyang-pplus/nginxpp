@@ -60,28 +60,52 @@ Accept-Language: zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7
     ASSERT_EQ(15, a_request.headers.size());
 }
 
-TEST(ParserTest, ThrowIfMissingStartLine) {
+TEST(ParserTest, ErrorIfMissingStartLine) {
     std::istringstream ss;
 
-    ASSERT_THROW(ParseOne(ss), ParserException);
+    const auto a_request = ParseOne(ss);
+    EXPECT_NE(200, a_request.status);
+    EXPECT_FALSE(a_request);
 }
 
-TEST(ParserTest, ThrowIfInvalidStartLine) {
+TEST(ParserTest, ErrorIfInvalidStartLine) {
     std::istringstream ss {R"(GET HTTP/1.1)"};
 
-    ASSERT_THROW(ParseOne(ss), ParserException);
+    const auto a_request = ParseOne(ss);
+    EXPECT_NE(200, a_request.status);
+    EXPECT_FALSE(a_request);
 }
 
-TEST(ParserTest, ThrowIfUnknownMethod) {
+TEST(ParserTest, ErrorIfVersionNotSupported) {
+    std::istringstream ss {R"(GET / HTTP/2.1)"};
+
+    const auto a_request = ParseOne(ss);
+    EXPECT_NE(200, a_request.status);
+    EXPECT_FALSE(a_request);
+}
+
+TEST(ParserTest, ErrorIfUnknownMethod) {
     std::istringstream ss {R"(PICK /home.html HTTP/1.1)"};
 
-    ASSERT_THROW(ParseOne(ss), ParserException);
+    const auto a_request = ParseOne(ss);
+    EXPECT_NE(200, a_request.status);
+    EXPECT_FALSE(a_request);
 }
 
-TEST(ParserTest, ThrowIfUnsupportedHttpVersion) {
-    std::istringstream ss {R"(GET /home.html HTTP/2.0)"};
+TEST(ParserTest, ErrorIfMethodNotImplemented) {
+    std::istringstream ss {R"(TRACE /home.html HTTP/1.1)"};
 
-    ASSERT_THROW(ParseOne(ss), HttpVersionException);
+    const auto a_request = ParseOne(ss);
+    EXPECT_NE(200, a_request.status);
+    EXPECT_FALSE(a_request);
+}
+
+TEST(ParserTest, ErrorIfTargetTooLong) {
+    std::istringstream ss {"TRACE " + std::string(MAX_LINE_LENGTH, '/') + "/home.html HTTP/1.1"};
+
+    const auto a_request = ParseOne(ss);
+    EXPECT_NE(200, a_request.status);
+    EXPECT_FALSE(a_request);
 }
 
 TEST(ParserTest, CanParseHeaders) {
@@ -99,6 +123,22 @@ Upgrade-Insecure-Requests: 1
     ASSERT_EQ(2, a_request.headers.size());
     EXPECT_EQ("keep-alive", a_request.headers.at("connection"));
     EXPECT_EQ("1", a_request.headers.at("upgrade-insecure-requests"));
+}
+
+TEST(ParserTest, DuplicateHeadersShallBeCombined) {
+    std::istringstream ss {R"(GET /home.html HTTP/1.1
+Sample: one
+Sample: 1
+)"};
+
+    const auto a_request = ParseOne(ss);
+
+    EXPECT_EQ(Method::GET, a_request.method);
+    EXPECT_EQ("/home.html", a_request.target);
+    EXPECT_EQ("HTTP/1.1", a_request.version);
+
+    ASSERT_EQ(1, a_request.headers.size());
+    EXPECT_EQ("one, 1", a_request.headers.at("sample"));
 }
 
 TEST(ParserTest, BreakAtBlankLine) {
@@ -140,4 +180,16 @@ max-age=0
     ASSERT_EQ(2, a_request.headers.size());
     EXPECT_EQ("keep-alive", a_request.headers.at("connection"));
     EXPECT_EQ("1", a_request.headers.at("upgrade-insecure-requests"));
+}
+
+TEST(ParserTest, ErrorIfHeaderTooLong) {
+    std::istringstream ss {R"(GET /home.html HTTP/1.1
+Connection: keep-alive
+Long-Header:)" + std::string(MAX_LINE_LENGTH + 1, '*') +
+                           '\n'};
+
+    const auto a_request = ParseOne(ss);
+
+    EXPECT_NE(200, a_request.status);
+    EXPECT_FALSE(a_request);
 }

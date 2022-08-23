@@ -48,6 +48,8 @@ int main(int argc, const char *argv[]) {
     auto server = [&server_options]() {
         try {
             return HttpServer {server_options};
+        } catch (const ServerException &e) {
+            std::cerr << e.what() << std::endl;
         } catch (const SocketException &e) {
             std::cerr << e.what() << std::endl;
         }

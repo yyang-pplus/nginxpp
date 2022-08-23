@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <iosfwd>
 #include <string>
 #include <unordered_map>
@@ -7,7 +8,7 @@
 
 namespace nginxpp {
 
-constexpr int MAX_LINE_LENGTH = 8192;
+constexpr std::size_t MAX_LINE_LENGTH = 8192;
 constexpr auto VERSION = "HTTP/1.1";
 
 
@@ -15,29 +16,36 @@ enum class Method { UNKNOWN, GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRA
 
 using HeaderMap = std::unordered_map<std::string, std::string>;
 
-struct Request {
+struct Message {
     HeaderMap headers;
+    std::string body;
+
+    std::string error_str;
+    int status = 200;
+
+    operator bool() const noexcept {
+        return error_str.empty();
+    }
+};
+
+struct Request : public Message {
     std::string target;
     std::string version;
     Method method {};
 };
 
-struct Response {
+struct Response : public Message {
     void SetBody(std::string b) noexcept {
         headers["Content-Type"] = "text/html; charset=ascii";
         headers["Content-Length"] = std::to_string(b.size());
 
         body = std::move(b);
     }
-
-    HeaderMap headers;
-    std::string body;
-    int status {};
 };
 
-[[nodiscard]] Request ParseOne(std::istream &in);
+[[nodiscard]] Request ParseOne(std::istream &in) noexcept;
 
-[[nodiscard]] Response Handle(const Request &a_request) noexcept;
+[[nodiscard]] Response Handle(Request a_request, const std::filesystem::path &root_dir) noexcept;
 
 std::ostream &operator<<(std::ostream &out, const Response &a_response) noexcept;
 

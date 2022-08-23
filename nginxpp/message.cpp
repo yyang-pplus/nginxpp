@@ -16,7 +16,6 @@ using namespace nginxpp;
 namespace {
 
 [[nodiscard]] auto parseMethod(const std::string_view method_str) {
-
     static const std::unordered_map<std::string_view, Method> method_map {
         {"GET", Method::GET},
         {"HEAD", Method::HEAD},
@@ -41,58 +40,93 @@ namespace {
     return uri;
 }
 
-[[nodiscard]] auto parseStartLine(std::istream &in) {
+[[nodiscard]] auto parseStartLine(std::istream &in) noexcept {
+    Request a_request;
+
     std::string start_line;
     if (not std::getline(in, start_line)) {
-        throw ParserException {"No start line"};
+        a_request.status = 400;
+        a_request.error_str = "No start line";
+        return a_request;
     }
 
     static const std::regex start_line_regex {R"(^(\S+)\s(\S+)\s(\S+)\s*$)"};
 
     std::smatch matches;
     if (not std::regex_match(start_line, matches, start_line_regex)) {
-        throw ParserException {"Invalid start line: '" + start_line + '\''};
+        a_request.status = 400;
+        a_request.error_str = "Invalid start line: '" + start_line + '\'';
+        return a_request;
     }
 
-    Request a_request;
-    a_request.method = parseMethod(matches[1].str());
+    const auto method_str = matches[1].str();
+    try {
+        a_request.method = parseMethod(method_str);
+    } catch (const ParserException &e) {
+        a_request.status = 400;
+        a_request.error_str = e.what();
+        return a_request;
+    }
     a_request.target = decodeURI(matches[2].str());
     a_request.version = matches[3].str();
 
     if (a_request.version != "HTTP/1.1" and a_request.version != "HTTP/1.0") {
-        throw HttpVersionException {"HTTP version '" + a_request.version + "' is not supported"};
+        a_request.status = 505;
+        a_request.error_str = "HTTP version '" + a_request.version + "' is not supported";
+        return a_request;
+    }
+
+    if (a_request.method != Method::GET and a_request.method != Method::HEAD) {
+        a_request.status = 501;
+        a_request.error_str = "HTTP method " + method_str + " not implemented";
+        return a_request;
+    }
+
+    if (a_request.target.size() > MAX_LINE_LENGTH) {
+        a_request.status = 414;
+        a_request.error_str = "Target URI length " + std::to_string(a_request.target.size()) +
+                              " exceeds maximum " + std::to_string(MAX_LINE_LENGTH);
+        return a_request;
     }
 
     return a_request;
 }
 
-void parseOneHeader(const std::string &a_header,
-                    std::unordered_map<std::string, std::string> &headers) noexcept {
+[[nodiscard]] auto parseOneHeader(const std::string &a_header, Request &a_request) noexcept {
     static const std::regex header_regex {R"(^\s*(\S+)\s*:\s*(.+)\s*$)"};
+
+    if (a_header.empty()) {
+        return false;
+    }
 
     std::smatch matches;
     if (std::regex_match(a_header, matches, header_regex)) {
-        headers.emplace(ToLower(matches[1].str()), decodeURI(matches[2].str()));
-    }
-}
-
-[[nodiscard]] auto parseHeaders(std::istream &in) {
-    std::unordered_map<std::string, std::string> headers;
-
-    std::string a_line;
-    while (std::getline(in, a_line)) {
-        if (a_line.empty()) {
-            break;
+        auto value = decodeURI(matches[2].str());
+        const auto [iter, inserted] =
+            a_request.headers.try_emplace(ToLower(matches[1].str()), std::move(value));
+        if (not inserted) {
+            iter->second += ", " + std::move(value);
         }
-        parseOneHeader(a_line, headers);
-    }
-    in.clear();
 
-    Ensures(in);
-    return headers;
+        if (iter->second.size() > MAX_LINE_LENGTH) {
+            a_request.status = 431;
+            a_request.error_str = "Header field '" + iter->first + "' length " +
+                                  std::to_string(iter->second.size()) + " exceeds maximum " +
+                                  std::to_string(MAX_LINE_LENGTH);
+            return false;
+        }
+    }
+
+    return true;
 }
 
-[[nodiscard]] auto toStatusText(const int code) {
+void parseHeaders(std::istream &in, Request &a_request) noexcept {
+    std::string a_line;
+    while (std::getline(in, a_line) and parseOneHeader(a_line, a_request)) {
+    }
+}
+
+[[nodiscard]] auto toStatusText(const int code) noexcept {
     switch (code) {
     case 100:
         return "Continue";
@@ -230,16 +264,27 @@ void parseOneHeader(const std::string &a_header,
 
 namespace nginxpp {
 
-[[nodiscard]] Request ParseOne(std::istream &in) {
+[[nodiscard]] Request ParseOne(std::istream &in) noexcept {
+    const auto in_final = gsl::finally([&in]() {
+        in.clear();
+    });
+
     auto a_request = parseStartLine(in);
-    a_request.headers = parseHeaders(in);
+    if (a_request) {
+        parseHeaders(in, a_request);
+    }
 
     return a_request;
 }
 
-[[nodiscard]] Response Handle(const Request &) noexcept {
+[[nodiscard]] Response Handle(Request a_request,
+                              const std::filesystem::path & /*root_dir*/) noexcept {
     Response a_response;
-    a_response.status = 200;
+    a_response.status = a_request.status;
+    a_response.error_str = std::move(a_request.error_str);
+    if (not a_response) {
+        return a_response;
+    }
 
     a_response.SetBody("Hello World");
 
