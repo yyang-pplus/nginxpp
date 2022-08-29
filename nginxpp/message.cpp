@@ -1,12 +1,15 @@
 #include <nginxpp/message.hpp>
 
+#include <fstream>
 #include <istream>
 #include <regex>
+#include <sstream>
 #include <string>
 
 #include <gsl/gsl>
 
 #include <nginxpp/exception.hpp>
+#include <nginxpp/path_utils.hpp>
 #include <nginxpp/string_utils.hpp>
 
 
@@ -68,6 +71,9 @@ namespace {
         return a_request;
     }
     a_request.target = decodeURI(matches[2].str());
+    if (not a_request.target.empty() and a_request.target.front() == '/') {
+        a_request.target.erase(a_request.target.cbegin());
+    }
     a_request.version = matches[3].str();
 
     if (a_request.version != "HTTP/1.1" and a_request.version != "HTTP/1.0") {
@@ -259,6 +265,74 @@ void parseHeaders(std::istream &in, Request &a_request) noexcept {
     }
 }
 
+[[nodiscard]] std::string toContentType(const std::filesystem::path &p) noexcept {
+    static const std::unordered_map<std::string_view, std::string> CONTENT_TYPE_MAP = {
+        {"css", "text/css"},
+        {"csv", "text/csv"},
+        {"htm", "text/html"},
+        {"html", "text/html"},
+        {"js", "text/javascript"},
+        {"mjs", "text/javascript"},
+        {"txt", "text/plain"},
+        {"vtt", "text/vtt"},
+
+        {"apng", "image/apng"},
+        {"avif", "image/avif"},
+        {"bmp", "image/bmp"},
+        {"gif", "image/gif"},
+        {"png", "image/png"},
+        {"svg", "image/svg+xml"},
+        {"webp", "image/webp"},
+        {"ico", "image/x-icon"},
+        {"tif", "image/tiff"},
+        {"tiff", "image/tiff"},
+        {"jpg", "image/jpeg"},
+        {"jpeg", "image/jpeg"},
+
+        {"mp4", "video/mp4"},
+        {"mpeg", "video/mpeg"},
+        {"webm", "video/webm"},
+
+        {"mp3", "audio/mp3"},
+        {"mpga", "audio/mpeg"},
+        {"weba", "audio/webm"},
+        {"wav", "audio/wave"},
+
+        {"otf", "font/otf"},
+        {"ttf", "font/ttf"},
+        {"woff", "font/woff"},
+        {"woff2", "font/woff2"},
+
+        {"7z", "application/x-7z-compressed"},
+        {"atom", "application/atom+xml"},
+        {"pdf", "application/pdf"},
+        {"json", "application/json"},
+        {"rss", "application/rss+xml"},
+        {"tar", "application/x-tar"},
+        {"xht", "application/xhtml+xml"},
+        {"xhtml", "application/xhtml+xml"},
+        {"xslt", "application/xslt+xml"},
+        {"xml", "application/xml"},
+        {"gz", "application/gzip"},
+        {"zip", "application/zip"},
+        {"wasm", "application/wasm"},
+    };
+
+    const auto extension = ToLower(p.extension());
+    const auto key = [](const std::string_view ext) {
+        if (not ext.empty() and ext.front() == '.') {
+            return ext.substr(1);
+        }
+        return ext;
+    }(extension);
+
+    if (const auto iter = CONTENT_TYPE_MAP.find(key); iter != CONTENT_TYPE_MAP.cend()) {
+        return iter->second;
+    }
+
+    return "application/octet-stream";
+}
+
 } //namespace
 
 
@@ -277,8 +351,7 @@ namespace nginxpp {
     return a_request;
 }
 
-[[nodiscard]] Response Handle(Request a_request,
-                              const std::filesystem::path & /*root_dir*/) noexcept {
+[[nodiscard]] Response Handle(Request a_request, const std::filesystem::path &root_dir) noexcept {
     Response a_response;
     a_response.status = a_request.status;
     a_response.error_str = std::move(a_request.error_str);
@@ -286,7 +359,48 @@ namespace nginxpp {
         return a_response;
     }
 
-    a_response.SetBody("Hello World");
+    const auto p = weakly_canonical(root_dir / a_request.target);
+
+    if (not StartsWith(p, root_dir)) {
+        a_response.status = 403;
+        a_response.error_str = "Access to '" + p.string() + "' not allowed";
+        return a_response;
+    }
+
+    if (not std::filesystem::exists(p)) {
+        a_response.status = 404;
+        a_response.error_str = "Target '" + p.string() + "' not found";
+        return a_response;
+    }
+
+    if (is_directory(p)) {
+        std::vector<PathStats> children;
+        for (const auto &child : std::filesystem::directory_iterator {p}) {
+            children.emplace_back(child);
+        }
+
+        std::string table_headers;
+        auto ss = std::make_unique<std::stringstream>();
+        *ss << table_headers << '\n';
+        for (const auto &s : children) {
+            *ss << s.path.filename() << '\t' << s.modification_time << '\t' << s.size << '\n';
+        }
+
+        a_response.headers["Content-Type"] = "text/html; charset=ascii";
+        a_response.headers["Content-Length"] = std::to_string(ss->str().size());
+        a_response.body_stream = std::move(ss);
+
+    } else if (is_regular_file(p)) {
+        PathStats stats {p};
+        a_response.headers["Content-Type"] = toContentType(p);
+        a_response.headers["Content-Length"] = std::to_string(stats.size);
+        a_response.body_stream = std::make_unique<std::fstream>(p, std::ios::binary);
+
+    } else {
+        a_response.status = 500;
+        a_response.error_str = "File type '" + p.string() + "' not supported";
+        return a_response;
+    }
 
     return a_response;
 }
@@ -297,8 +411,13 @@ std::ostream &operator<<(std::ostream &out, const Response &a_response) noexcept
     for (const auto &[key, value] : a_response.headers) {
         out << key << ": " << value << '\n';
     }
+    out << '\n';
 
-    return out << '\n' << a_response.body;
+    if (a_response.body_stream) {
+        out << a_response.body_stream->rdbuf();
+    }
+
+    return out;
 }
 
 } //namespace nginxpp

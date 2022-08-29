@@ -43,6 +43,7 @@ endif ()
 
 discover_gtest_for(server ${PROJECT_NAME}::${PROJECT_NAME})
 discover_gtest_for(message ${PROJECT_NAME}::${PROJECT_NAME})
+discover_gtest_for(path_utils ${PROJECT_NAME}::${PROJECT_NAME})
 
 if (${PROJECT_NAME}_WANT_INSTALLER)
     install(
