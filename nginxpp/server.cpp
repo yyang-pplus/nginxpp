@@ -383,6 +383,7 @@ HttpServer::HttpServer(const ServerOptions &options) :
         throw ServerException {"Base mount directory doesn't exist: '" + options.base_mount_dir +
                                '\''};
     }
+    m_root_dir = canonical(m_root_dir);
 
     if (m_port == 0) {
         m_port = internal::getPort(m_socket);
@@ -399,7 +400,8 @@ void HttpServer::greet() const noexcept {
 |_| |_|\__, |_|_| |_/_/\_\ .__/| .__/
        |___/             |_|   |_|      starting up.
 )"
-              << "Listening on port: " << m_port << std::endl;
+              << "Listening on port: " << m_port << '\n'
+              << "Base mount directory: " << m_root_dir << std::endl;
 }
 
 

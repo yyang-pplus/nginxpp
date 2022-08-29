@@ -27,7 +27,7 @@ Cache-Control: max-age=0
     const auto a_request = ParseOne(ss);
 
     EXPECT_EQ(Method::GET, a_request.method);
-    EXPECT_EQ("/home.html", a_request.target);
+    EXPECT_EQ("home.html", a_request.target);
     EXPECT_EQ("HTTP/1.1", a_request.version);
     ASSERT_EQ(11, a_request.headers.size());
 }
@@ -55,7 +55,7 @@ Accept-Language: zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7
     const auto a_request = ParseOne(ss);
 
     EXPECT_EQ(Method::GET, a_request.method);
-    EXPECT_EQ("/", a_request.target);
+    EXPECT_EQ("", a_request.target);
     EXPECT_EQ("HTTP/1.1", a_request.version);
     ASSERT_EQ(15, a_request.headers.size());
 }
@@ -117,7 +117,7 @@ Upgrade-Insecure-Requests: 1
     const auto a_request = ParseOne(ss);
 
     EXPECT_EQ(Method::GET, a_request.method);
-    EXPECT_EQ("/home.html", a_request.target);
+    EXPECT_EQ("home.html", a_request.target);
     EXPECT_EQ("HTTP/1.1", a_request.version);
 
     ASSERT_EQ(2, a_request.headers.size());
@@ -134,7 +134,7 @@ Sample: 1
     const auto a_request = ParseOne(ss);
 
     EXPECT_EQ(Method::GET, a_request.method);
-    EXPECT_EQ("/home.html", a_request.target);
+    EXPECT_EQ("home.html", a_request.target);
     EXPECT_EQ("HTTP/1.1", a_request.version);
 
     ASSERT_EQ(1, a_request.headers.size());
@@ -154,7 +154,7 @@ Referer: https://developer.mozilla.org/testpage.html
     const auto a_request = ParseOne(ss);
 
     EXPECT_EQ(Method::GET, a_request.method);
-    EXPECT_EQ("/home.html", a_request.target);
+    EXPECT_EQ("home.html", a_request.target);
     EXPECT_EQ("HTTP/1.1", a_request.version);
 
     ASSERT_EQ(2, a_request.headers.size());
@@ -174,7 +174,7 @@ max-age=0
     ASSERT_NO_THROW(a_request = ParseOne(ss));
 
     EXPECT_EQ(Method::GET, a_request.method);
-    EXPECT_EQ("/home.html", a_request.target);
+    EXPECT_EQ("home.html", a_request.target);
     EXPECT_EQ("HTTP/1.1", a_request.version);
 
     ASSERT_EQ(2, a_request.headers.size());
@@ -192,4 +192,50 @@ Long-Header:)" + std::string(MAX_LINE_LENGTH + 1, '*') +
 
     EXPECT_NE(200, a_request.status);
     EXPECT_FALSE(a_request);
+}
+
+
+TEST(HandleTest, ErrorIfInvalidRequest) {
+    Request a_request;
+    a_request.status = 500;
+    a_request.error_str = "Error";
+
+    const auto a_response = Handle(a_request, std::filesystem::current_path());
+    EXPECT_FALSE(a_response);
+    EXPECT_EQ(a_request.error_str, a_response.error_str);
+    EXPECT_EQ(a_request.status, a_response.status);
+}
+
+TEST(HandleTest, ErrorIfRequestFileOutSideRoot) {
+    Request a_request;
+    a_request.target = "..";
+
+    const auto a_response = Handle(a_request, std::filesystem::current_path());
+    EXPECT_FALSE(a_response);
+}
+
+TEST(HandleTest, ErrorIfRequestFileNotExist) {
+    Request a_request;
+    a_request.target = "no_such_file";
+
+    const auto a_response = Handle(a_request, std::filesystem::current_path());
+    EXPECT_FALSE(a_response);
+}
+
+TEST(HandleTest, HasBodyIfRequestDir) {
+    Request a_request;
+    a_request.target = ".";
+
+    const auto a_response = Handle(a_request, std::filesystem::current_path());
+    ASSERT_TRUE(a_response);
+    EXPECT_TRUE(a_response.body_stream);
+}
+
+TEST(HandleTest, HasBodyIfRequestFile) {
+    Request a_request;
+    a_request.target = "Makefile";
+
+    const auto a_response = Handle(a_request, std::filesystem::current_path());
+    ASSERT_TRUE(a_response);
+    EXPECT_TRUE(a_response.body_stream);
 }

@@ -18,7 +18,6 @@ using HeaderMap = std::unordered_map<std::string, std::string>;
 
 struct Message {
     HeaderMap headers;
-    std::string body;
 
     std::string error_str;
     int status = 200;
@@ -35,12 +34,7 @@ struct Request : public Message {
 };
 
 struct Response : public Message {
-    void SetBody(std::string b) noexcept {
-        headers["Content-Type"] = "text/html; charset=ascii";
-        headers["Content-Length"] = std::to_string(b.size());
-
-        body = std::move(b);
-    }
+    std::unique_ptr<std::iostream> body_stream;
 };
 
 [[nodiscard]] Request ParseOne(std::istream &in) noexcept;
