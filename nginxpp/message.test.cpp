@@ -239,3 +239,21 @@ TEST(HandleTest, HasBodyIfRequestFile) {
     ASSERT_TRUE(a_response);
     EXPECT_TRUE(a_response.body_stream);
 }
+
+
+TEST(ResponseTest, OutputInExpectedFormat) {
+    Response a_response;
+    a_response.status = 200;
+    a_response.headers["Connection"] = "keep-alive";
+    a_response.body_stream = std::make_unique<std::stringstream>("Hello");
+
+    std::ostringstream oss;
+    oss << a_response;
+
+    const std::string EXPECTED = R"(HTTP/1.1 200 OK
+Connection: keep-alive
+
+Hello)";
+
+    EXPECT_EQ(EXPECTED, oss.str());
+}
