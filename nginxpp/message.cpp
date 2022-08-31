@@ -8,6 +8,7 @@
 
 #include <gsl/gsl>
 
+#include <nginxpp/chrono_utils.hpp>
 #include <nginxpp/exception.hpp>
 #include <nginxpp/path_utils.hpp>
 #include <nginxpp/string_utils.hpp>
@@ -333,6 +334,65 @@ void parseHeaders(std::istream &in, Request &a_request) noexcept {
     return "application/octet-stream";
 }
 
+inline auto toHtmlTableHeaderRow(const std::vector<std::string_view> &headers) noexcept {
+    std::ostringstream oss;
+    oss << "<tr>";
+    for (const auto a_header : headers) {
+        oss << "<th>" << a_header << "</th>";
+    }
+    oss << "</tr>";
+
+    return oss.str();
+}
+
+std::ostream &operator<<(std::ostream &out, const std::filesystem::file_time_type &tp) noexcept {
+    constexpr auto *format = "%F %T %Z";
+
+    const auto tt = std::chrono::system_clock::to_time_t(
+        ClockCast<std::chrono::system_clock::time_point>(tp));
+    const auto *tm = std::gmtime(&tt); //not thread-safe
+    if (tm) {
+        out << std::put_time(tm, format);
+    }
+
+    return out;
+}
+
+template<typename T>
+inline auto toHtmlTableCell(const T &v) noexcept {
+    std::ostringstream oss;
+    oss << "<td>" << v << "</td>";
+
+    return oss.str();
+}
+
+inline auto toHtmlTableRow(const PathStats &s) noexcept {
+    std::ostringstream oss;
+    oss << "<tr>" << toHtmlTableCell(s.path.filename()) << toHtmlTableCell(s.modification_time)
+        << toHtmlTableCell(s.size == -1 ? "" : std::to_string(s.size)) << "</tr>";
+
+    return oss.str();
+}
+
+constexpr auto *HTML_STYLE = R"(
+<style>
+table {
+    font-family: arial, sans-serif;
+    border-collapse: collapse;
+    width: 100%;
+}
+
+td, th {
+    border: 1px solid #dddddd;
+    text-align: left;
+    padding: 8px;
+}
+
+tr:nth-child(even) {
+    background-color: #dddddd;
+}
+</style>)";
+
 } //namespace
 
 
@@ -374,17 +434,25 @@ namespace nginxpp {
     }
 
     if (is_directory(p)) {
-        std::vector<PathStats> children;
-        for (const auto &child : std::filesystem::directory_iterator {p}) {
-            children.emplace_back(child);
-        }
+        static const std::vector<std::string_view> ls_headers = {"Name", "Date Modified", "Size"};
+        const auto children = GetChildStats(p);
 
-        std::string table_headers;
         auto ss = std::make_unique<std::stringstream>();
-        *ss << table_headers << '\n';
+        *ss << "<!DOCTYPE html>";
+        *ss << "<html>";
+        *ss << "<head>";
+        *ss << HTML_STYLE;
+        *ss << "</head>";
+
+        *ss << "<body>";
+        *ss << "<table>";
+        *ss << toHtmlTableHeaderRow(ls_headers);
         for (const auto &s : children) {
-            *ss << s.path.filename() << '\t' << s.modification_time << '\t' << s.size << '\n';
+            *ss << toHtmlTableRow(s);
         }
+        *ss << "</table>";
+        *ss << "</body>";
+        *ss << "</html>";
 
         a_response.headers["Content-Type"] = "text/html; charset=ascii";
         a_response.headers["Content-Length"] = std::to_string(ss->str().size());
