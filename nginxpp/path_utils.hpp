@@ -5,10 +5,9 @@
 
 #include <filesystem>
 #include <iomanip>
+#include <vector>
 
 #include <gsl/gsl>
-
-#include <nginxpp/chrono_utils.hpp>
 
 
 namespace nginxpp {
@@ -37,6 +36,17 @@ struct PathStats {
     }
 };
 
+[[nodiscard]] static inline auto GetChildStats(const std::filesystem::path &p) noexcept {
+    Expects(is_directory(p));
+
+    std::vector<PathStats> children;
+    for (const auto &child_entry : std::filesystem::directory_iterator {p}) {
+        children.emplace_back(child_entry);
+    }
+
+    return children;
+}
+
 [[nodiscard]] static inline auto StartsWith(const std::filesystem::path &p,
                                             const std::filesystem::path &prefix) {
     Expects(p.is_absolute());
@@ -50,19 +60,6 @@ struct PathStats {
     }
 
     return true;
-}
-
-std::ostream &operator<<(std::ostream &out, const std::filesystem::file_time_type &tp) noexcept {
-    constexpr auto *format = "%F %T %Z";
-
-    const auto tt = std::chrono::system_clock::to_time_t(
-        ClockCast<std::chrono::system_clock::time_point>(tp));
-    const auto *tm = std::gmtime(&tt);
-    if (tm) {
-        out << std::put_time(tm, format);
-    }
-
-    return out;
 }
 
 } //namespace nginxpp
