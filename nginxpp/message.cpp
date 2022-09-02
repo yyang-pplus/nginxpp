@@ -366,9 +366,22 @@ inline auto toHtmlTableCell(const T &v) noexcept {
     return oss.str();
 }
 
-inline auto toHtmlTableRow(const PathStats &s) noexcept {
+inline auto toHtmlLink(const std::string_view relative_link,
+                       const std::string_view text) noexcept {
+    Expects(not(StartsWith(relative_link, "http://") or StartsWith(relative_link, "https://")));
+
     std::ostringstream oss;
-    oss << "<tr>" << toHtmlTableCell(s.path.filename()) << toHtmlTableCell(s.modification_time)
+    oss << "<a href=/" << relative_link << '>' << text << "</a>";
+
+    return oss.str();
+}
+
+inline auto toHtmlTableRow(const PathStats &s, const std::filesystem::path &base) noexcept {
+    std::ostringstream oss;
+    oss << "<tr>"
+        << toHtmlTableCell(toHtmlLink(std::filesystem::relative(s.path, base).string(),
+                                      s.path.filename().string()))
+        << toHtmlTableCell(s.modification_time)
         << toHtmlTableCell(s.size == -1 ? "" : std::to_string(s.size)) << "</tr>";
 
     return oss.str();
@@ -448,7 +461,7 @@ namespace nginxpp {
         *ss << "<table>";
         *ss << toHtmlTableHeaderRow(ls_headers);
         for (const auto &s : children) {
-            *ss << toHtmlTableRow(s);
+            *ss << toHtmlTableRow(s, root_dir);
         }
         *ss << "</table>";
         *ss << "</body>";
