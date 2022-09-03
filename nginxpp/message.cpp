@@ -345,21 +345,8 @@ inline auto toHtmlTableHeaderRow(const std::vector<std::string_view> &headers) n
     return oss.str();
 }
 
-std::ostream &operator<<(std::ostream &out, const std::filesystem::file_time_type &tp) noexcept {
-    constexpr auto *format = "%F %T %Z";
-
-    const auto tt = std::chrono::system_clock::to_time_t(
-        ClockCast<std::chrono::system_clock::time_point>(tp));
-    const auto *tm = std::gmtime(&tt); //not thread-safe
-    if (tm) {
-        out << std::put_time(tm, format);
-    }
-
-    return out;
-}
-
 template<typename T>
-inline auto toHtmlTableCell(const T &v) noexcept {
+inline auto toHtmlTableCell(T &&v) noexcept {
     std::ostringstream oss;
     oss << "<td>" << v << "</td>";
 
@@ -406,6 +393,23 @@ tr:nth-child(even) {
 }
 </style>)";
 
+auto &buildLsTable(std::ostream &out,
+                   const std::filesystem::path &p,
+                   const std::filesystem::path &root_dir) noexcept {
+    Expects(is_directory(p));
+
+    static const std::vector<std::string_view> ls_headers = {"Name", "Date Modified", "Size"};
+    const auto children = GetChildStats(p);
+
+    out << "<table>";
+    out << toHtmlTableHeaderRow(ls_headers);
+    for (const auto &s : children) {
+        out << toHtmlTableRow(s, root_dir);
+    }
+
+    return out << "</table>";
+}
+
 } //namespace
 
 
@@ -447,9 +451,6 @@ namespace nginxpp {
     }
 
     if (is_directory(p)) {
-        static const std::vector<std::string_view> ls_headers = {"Name", "Date Modified", "Size"};
-        const auto children = GetChildStats(p);
-
         auto ss = std::make_unique<std::stringstream>();
         *ss << "<!DOCTYPE html>";
         *ss << "<html>";
@@ -458,12 +459,7 @@ namespace nginxpp {
         *ss << "</head>";
 
         *ss << "<body>";
-        *ss << "<table>";
-        *ss << toHtmlTableHeaderRow(ls_headers);
-        for (const auto &s : children) {
-            *ss << toHtmlTableRow(s, root_dir);
-        }
-        *ss << "</table>";
+        buildLsTable(*ss, p, root_dir);
         *ss << "</body>";
         *ss << "</html>";
 
