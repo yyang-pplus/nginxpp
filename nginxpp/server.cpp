@@ -96,16 +96,19 @@ template<typename Function, typename... Args>
 
 [[nodiscard]] inline auto
 read(const Socket &sock, char *const buffer, const std::size_t len) noexcept {
+    Expects(buffer);
     return handleEINTR(recv, sock, buffer, len, 0);
 }
 
 [[nodiscard]] inline auto
 write(const Socket &sock, const char *const buffer, const std::size_t len) noexcept {
+    Expects(buffer);
     return handleEINTR(send, sock, buffer, len, 0);
 }
 
 [[nodiscard]] inline auto
 sendAll(const Socket &sock, const char *const buffer, const std::size_t requested) noexcept {
+    Expects(buffer);
     for (std::size_t total_sent = 0; total_sent < requested;) {
         const auto left = requested - total_sent;
         const auto n = write(sock, buffer + total_sent, left);
