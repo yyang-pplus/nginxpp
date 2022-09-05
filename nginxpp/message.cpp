@@ -403,6 +403,10 @@ auto &buildLsTable(std::ostream &out,
 
     out << "<table>";
     out << toHtmlTableHeaderRow(ls_headers);
+    out << toHtmlTableRow(PathStats {p / "."}, root_dir);
+    if (p != root_dir) {
+        out << toHtmlTableRow(PathStats {p / ".."}, root_dir);
+    }
     for (const auto &s : children) {
         out << toHtmlTableRow(s, root_dir);
     }
