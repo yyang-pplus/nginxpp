@@ -414,6 +414,40 @@ auto &buildLsTable(std::ostream &out,
     return out << "</table>";
 }
 
+auto &buildLsHeader(std::ostream &out,
+                    const std::filesystem::path &p,
+                    const std::filesystem::path &root_dir) noexcept {
+    const auto relative_path = std::filesystem::relative(p, root_dir);
+    std::filesystem::path prefix;
+    out << "<h1>";
+    out << toHtmlLink(prefix.string(), "/");
+    if (p != root_dir) {
+        for (auto iter = relative_path.begin(); iter != relative_path.end(); ++iter) {
+            prefix /= *iter;
+            out << toHtmlLink(prefix.string(), iter->string() + '/');
+        }
+    }
+    return out << "</h1>";
+}
+
+auto &buildLsPage(std::ostream &out,
+                  const std::filesystem::path &p,
+                  const std::filesystem::path &root_dir) noexcept {
+    Expects(StartsWith(p, root_dir));
+
+    out << "<!DOCTYPE html>";
+    out << "<html>";
+    out << "<head>";
+    out << HTML_STYLE;
+    out << "</head>";
+
+    out << "<body>";
+    buildLsHeader(out, p, root_dir);
+    buildLsTable(out, p, root_dir);
+    out << "</body>";
+    return out << "</html>";
+}
+
 } //namespace
 
 
@@ -456,16 +490,7 @@ namespace nginxpp {
 
     if (is_directory(p)) {
         auto ss = std::make_unique<std::stringstream>();
-        *ss << "<!DOCTYPE html>";
-        *ss << "<html>";
-        *ss << "<head>";
-        *ss << HTML_STYLE;
-        *ss << "</head>";
-
-        *ss << "<body>";
-        buildLsTable(*ss, p, root_dir);
-        *ss << "</body>";
-        *ss << "</html>";
+        buildLsPage(*ss, p, root_dir);
 
         a_response.headers["Content-Type"] = "text/html; charset=ascii";
         a_response.headers["Content-Length"] = std::to_string(ss->str().size());
