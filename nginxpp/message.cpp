@@ -424,7 +424,7 @@ auto &buildLsHeader(std::ostream &out,
     if (p != root_dir) {
         for (auto iter = relative_path.begin(); iter != relative_path.end(); ++iter) {
             prefix /= *iter;
-            out << toHtmlLink(prefix.string(), iter->string() + '/');
+            out << toHtmlLink(prefix.string(), ' ' + iter->string() + " /");
         }
     }
     return out << "</h1>";
