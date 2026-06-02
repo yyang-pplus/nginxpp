@@ -21,7 +21,7 @@ list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
 include(utils)
 
-config_cxx_compiler_and_linker()
+config_cxx_compiler_and_linker(20)
 
 # ######################################################################################
 # CMake Standard Options

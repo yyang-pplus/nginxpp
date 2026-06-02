@@ -46,8 +46,8 @@ function (discover_gtest_for source_name)
 endfunction ()
 
 # config_compiler_and_linker
-macro (CONFIG_CXX_COMPILER_AND_LINKER)
-    set(CMAKE_CXX_STANDARD 17)
+macro (CONFIG_CXX_COMPILER_AND_LINKER std)
+    set(CMAKE_CXX_STANDARD ${std})
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
     set(CMAKE_CXX_EXTENSIONS OFF)
 

@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include <nginxpp/args.hpp>
 #include <nginxpp/version.hpp>
 

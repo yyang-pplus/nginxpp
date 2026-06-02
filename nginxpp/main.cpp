@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include <nginxpp/args.hpp>
 #include <nginxpp/exception.hpp>
 #include <nginxpp/server.hpp>
@@ -21,9 +23,9 @@ handleOptions(cxxopts::Options &options, const int argc, const char *argv[]) noe
     const auto results = [&]() {
         try {
             return options.parse(argc, argv);
-        } catch (const cxxopts::option_not_exists_exception &e) {
+        } catch (const cxxopts::exceptions::no_such_option &e) {
             std::cerr << e.what() << std::endl;
-        } catch (const cxxopts::OptionException &e) {
+        } catch (const cxxopts::exceptions::exception &e) {
             std::cerr << e.what() << std::endl;
         }
         exit(EXIT_FAILURE);
