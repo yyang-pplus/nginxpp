@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 #
 # This script installs required dependencies.
 #

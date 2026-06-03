@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 #
 # This script setup develop environment by installing required libraries
 #
@@ -16,5 +18,7 @@ INSTALLER_FILE=$PROJECT_ROOT_DIR/../config-sh/scripts/install_all_hooks.sh
 if [ -f "$INSTALLER_FILE" ]; then
     $INSTALLER_FILE
 else
+    sudo apt-get --yes install pipx
+    pipx install pre-commit
     pre-commit install
 fi
